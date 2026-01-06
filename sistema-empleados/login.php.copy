@@ -1,0 +1,173 @@
+<?php
+session_start();
+
+// Si ya está autenticado, redirigir al dashboard
+if (isset($_SESSION['usuario_id'])) {
+    header('Location: /sistema-empleados/modules/dashboard/index.php');
+    exit();
+}
+
+// Conexión a la base de datos
+require_once 'config/database.php';
+
+$error = '';
+$success = '';
+
+// Procesar formulario de login
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $usuario = trim($_POST['usuario'] ?? '');
+    $password = $_POST['password'] ?? '';
+    
+    if (empty($usuario) || empty($password)) {
+        $error = 'Usuario y contraseña son requeridos';
+    } else {
+        try {
+            // Buscar usuario en la base de datos
+            $stmt = $conn->prepare("SELECT id, nombre, usuario, password, rol, activo FROM usuarios WHERE usuario = :usuario");
+            $stmt->bindParam(':usuario', $usuario);
+            $stmt->execute();
+            
+            if ($stmt->rowCount() > 0) {
+                $user = $stmt->fetch(PDO::FETCH_ASSOC);
+                
+                // Verificar contraseña
+                if (password_verify($password, $user['password'])) {
+                    if ($user['activo'] == 1) {
+                        // Crear sesión
+                        $_SESSION['usuario_id'] = $user['id'];
+                        $_SESSION['usuario_nombre'] = $user['nombre'];
+                        $_SESSION['usuario_usuario'] = $user['usuario'];
+                        $_SESSION['usuario_rol'] = $user['rol'];
+                        $_SESSION['LAST_ACTIVITY'] = time();
+                        
+                        // Redirigir a la página solicitada o al dashboard
+                        $redirect_url = $_SESSION['redirect_url'] ?? '/sistema-empleados/modules/dashboard/index.php';
+                        unset($_SESSION['redirect_url']);
+                        
+                        header("Location: $redirect_url");
+                        exit();
+                    } else {
+                        $error = 'Usuario inactivo. Contacte al administrador.';
+                    }
+                } else {
+                    $error = 'Credenciales incorrectas';
+                }
+            } else {
+                $error = 'Usuario no encontrado';
+            }
+        } catch (PDOException $e) {
+            $error = 'Error en el sistema: ' . $e->getMessage();
+        }
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Sistema de Empleados</title>
+    <link rel="stylesheet" href="/sistema-empleados/css/styles.css">
+    <style>
+        .login-container {
+            max-width: 400px;
+            margin: 100px auto;
+            padding: 30px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .login-header img {
+            max-width: 150px;
+            margin-bottom: 15px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        
+        .btn-login {
+            width: 100%;
+            padding: 12px;
+            background: #2c3e50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .btn-login:hover {
+            background: #34495e;
+        }
+        
+        .alert {
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <img src="/sistema-empleados/assets/logo.png" alt="Logo RH Victoria">
+            <h1>Sistema de Empleados</h1>
+            <p>Ingrese sus credenciales</p>
+        </div>
+        
+        <?php if ($error): ?>
+            <div class="alert alert-error"><?php echo htmlspecialchars($error); ?></div>
+        <?php endif; ?>
+        
+        <?php if ($success): ?>
+            <div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div>
+        <?php endif; ?>
+        
+        <form method="POST" action="">
+            <div class="form-group">
+                <label for="usuario">Usuario:</label>
+                <input type="text" id="usuario" name="usuario" class="form-control" required 
+                       value="<?php echo htmlspecialchars($_POST['usuario'] ?? ''); ?>">
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Contraseña:</label>
+                <input type="password" id="password" name="password" class="form-control" required>
+            </div>
+            
+            <button type="submit" class="btn-login">Iniciar Sesión</button>
+        </form>
+        
+        <?php if (isset($_GET['expired'])): ?>
+            <div class="alert alert-error" style="margin-top: 20px;">
+                Su sesión ha expirado. Por favor, inicie sesión nuevamente.
+            </div>
+        <?php endif; ?>
+    </div>
+</body>
+</html>
